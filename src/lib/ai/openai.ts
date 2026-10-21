@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { buildStoryboardUserPrompt, STORYBOARD_SYSTEM_PROMPT } from "@/pipeline/prompts/storyboard";
+import { LIMITS } from "@/pipeline/schema";
 import { estimateLlmCostUsd } from "./pricing";
 import type { LlmClient, LlmResult, StoryboardRequest } from "./types";
 
@@ -73,6 +74,7 @@ export type ResponsesApi = {
     model: string;
     instructions: string;
     input: string;
+    max_output_tokens: number;
     text: {
       format: {
         type: "json_schema";
@@ -83,6 +85,8 @@ export type ResponsesApi = {
     };
   }): Promise<{
     model?: string;
+    /** 출력 토큰 상한에 걸려 잘리면 "incomplete" */
+    status?: string;
     output_text: string;
     usage?: { input_tokens: number; output_tokens: number } | null;
   }>;
@@ -120,6 +124,12 @@ function parseJson(text: string): unknown {
   }
 }
 
+/**
+ * 출력 토큰 상한. 모델이 길게 늘어놓아도 비용이 이 이상 나가지 않는다.
+ * 컷당 넉넉히 500토큰 + 등장인물·여유분 4,000 (추론 모델의 추론 토큰 포함).
+ */
+export const STORYBOARD_MAX_OUTPUT_TOKENS = 4000 + LIMITS.maxPanels * 500;
+
 export function createOpenAiLlm(options: {
   apiKey?: string;
   model?: string;
@@ -128,7 +138,9 @@ export function createOpenAiLlm(options: {
   const model = options.model || DEFAULT_LLM_MODEL;
   const responses =
     options.responses ??
-    (new OpenAI({ apiKey: options.apiKey }).responses as unknown as ResponsesApi);
+    // SDK 자체 재시도는 1회로 줄인다 (파이프라인 재시도와 겹쳐 호출이 늘어나지 않게).
+    (new OpenAI({ apiKey: options.apiKey, maxRetries: 1, timeout: 120_000 })
+      .responses as unknown as ResponsesApi);
 
   return {
     async createStoryboard(request: StoryboardRequest): Promise<LlmResult> {
@@ -136,6 +148,7 @@ export function createOpenAiLlm(options: {
         model,
         instructions: STORYBOARD_SYSTEM_PROMPT,
         input: buildStoryboardUserPrompt(request),
+        max_output_tokens: STORYBOARD_MAX_OUTPUT_TOKENS,
         text: {
           format: {
             type: "json_schema",
@@ -150,8 +163,11 @@ export function createOpenAiLlm(options: {
       const inputTokens = response.usage?.input_tokens ?? 0;
       const outputTokens = response.usage?.output_tokens ?? 0;
 
+      // 잘린 응답이나 거절(빈 출력)은 null 로 넘겨 파이프라인 재시도에 맡긴다.
+      const complete = response.status !== "incomplete" && response.output_text.trim() !== "";
+
       return {
-        data: normalizeStoryboardJson(parseJson(response.output_text)),
+        data: complete ? normalizeStoryboardJson(parseJson(response.output_text)) : null,
         usage: {
           model: usedModel,
           inputTokens,

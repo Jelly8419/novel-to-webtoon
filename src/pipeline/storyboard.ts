@@ -1,4 +1,4 @@
-import type { LlmClient, LlmUsage } from "@/lib/ai";
+import type { LlmClient, LlmResult, LlmUsage } from "@/lib/ai";
 import {
   LIMITS,
   StoryboardSchema,
@@ -23,12 +23,22 @@ export type StoryboardResult = {
   usage: LlmUsage[];
 };
 
-export class StoryboardFormatError extends Error {
+/** 콘티 생성 실패. 실패하기 전까지 나간 호출의 사용량(비용)을 함께 담는다. */
+export class StoryboardError extends Error {
   constructor(
     message: string,
     readonly usage: LlmUsage[],
+    options?: { cause?: unknown },
   ) {
-    super(message);
+    super(message, options);
+    this.name = "StoryboardError";
+  }
+}
+
+/** LLM 응답이 2회 모두 스키마에 맞지 않을 때 */
+export class StoryboardFormatError extends StoryboardError {
+  constructor(message: string, usage: LlmUsage[]) {
+    super(message, usage);
     this.name = "StoryboardFormatError";
   }
 }
@@ -62,12 +72,21 @@ export async function createStoryboard(
   let lastError = "";
 
   for (let attempt = 1; attempt <= STORYBOARD_MAX_ATTEMPTS; attempt++) {
-    const result = await deps.llm.createStoryboard({
-      text,
-      targetPanels: targetPanelsFor(text.length),
-      maxPanels: LIMITS.maxPanels,
-      knownCharacters,
-    });
+    let result: LlmResult;
+    try {
+      result = await deps.llm.createStoryboard({
+        text,
+        targetPanels: targetPanelsFor(text.length),
+        maxPanels: LIMITS.maxPanels,
+        knownCharacters,
+      });
+    } catch (error) {
+      // 네트워크·429·5xx 등. 앞선 시도의 비용 기록을 잃지 않게 사용량과 함께 던진다.
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new StoryboardError(`콘티 생성 호출이 실패했습니다: ${reason}`, usage, {
+        cause: error,
+      });
+    }
     usage.push(result.usage);
 
     const parsed = StoryboardSchema.safeParse(result.data);

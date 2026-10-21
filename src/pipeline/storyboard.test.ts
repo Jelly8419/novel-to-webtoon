@@ -5,6 +5,7 @@ import {
   createStoryboard,
   EpisodeTextError,
   normalizeEpisodeText,
+  StoryboardError,
   StoryboardFormatError,
 } from "./storyboard";
 
@@ -119,6 +120,22 @@ describe("createStoryboard 재시도", () => {
     expect(error).toBeInstanceOf(StoryboardFormatError);
     expect((error as StoryboardFormatError).usage).toHaveLength(2);
     expect(llm.calls).toBe(2);
+  });
+
+  it("두 번째 호출에서 API가 실패해도 첫 호출의 사용량을 잃지 않는다", async () => {
+    let calls = 0;
+    const llm: LlmClient = {
+      createStoryboard: async () => {
+        calls++;
+        if (calls === 1) return { data: null, usage };
+        throw new Error("429 Too Many Requests");
+      },
+    };
+    const error = await createStoryboard(sample, { llm }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(StoryboardError);
+    expect(error).not.toBeInstanceOf(StoryboardFormatError);
+    expect((error as StoryboardError).message).toContain("429");
+    expect((error as StoryboardError).usage).toEqual([usage]);
   });
 
   it("최대 컷 수를 넘는 콘티는 형식 오류로 본다", async () => {

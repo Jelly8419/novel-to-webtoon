@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { STORYBOARD_SYSTEM_PROMPT } from "@/pipeline/prompts/storyboard";
-import { StoryboardSchema } from "@/pipeline/schema";
+import { CharacterSchema, DialogueSchema, PanelSchema, StoryboardSchema } from "@/pipeline/schema";
 import {
   createOpenAiLlm,
   DEFAULT_LLM_MODEL,
   normalizeStoryboardJson,
   STORYBOARD_JSON_SCHEMA,
+  STORYBOARD_MAX_OUTPUT_TOKENS,
   type ResponsesApi,
 } from "./openai";
 import { estimateLlmCostUsd } from "./pricing";
@@ -74,6 +75,30 @@ describe("createOpenAiLlm", () => {
     });
   });
 
+  it("출력 토큰 상한을 건다", async () => {
+    const responses = fakeResponses(JSON.stringify(board));
+    await createOpenAiLlm({ responses }).createStoryboard(request);
+    expect(responses.create.mock.calls[0][0].max_output_tokens).toBe(STORYBOARD_MAX_OUTPUT_TOKENS);
+  });
+
+  it("상한에 걸려 잘린 응답이나 빈 응답(거절)은 data 를 null 로 넘기고 사용량은 남긴다", async () => {
+    const cut = vi.fn<ResponsesApi["create"]>(async () => ({
+      status: "incomplete",
+      output_text: JSON.stringify(board),
+      usage: { input_tokens: 10, output_tokens: 20 },
+    }));
+    const truncated = await createOpenAiLlm({ responses: { create: cut } }).createStoryboard(
+      request,
+    );
+    expect(truncated.data).toBeNull();
+    expect(truncated.usage.outputTokens).toBe(20);
+
+    const empty = await createOpenAiLlm({ responses: fakeResponses("  ") }).createStoryboard(
+      request,
+    );
+    expect(empty.data).toBeNull();
+  });
+
   it("JSON이 깨져 있으면 data 를 null 로 넘긴다 (재시도는 파이프라인 몫)", async () => {
     const responses = fakeResponses("{ 깨진 json");
     const result = await createOpenAiLlm({ responses }).createStoryboard(request);
@@ -102,6 +127,20 @@ describe("STORYBOARD_JSON_SCHEMA", () => {
   it("strict 모드 규칙대로 모든 속성이 required 다", () => {
     const panel = STORYBOARD_JSON_SCHEMA.properties.panels.items;
     expect([...panel.required].sort()).toEqual(Object.keys(panel.properties).sort());
+  });
+
+  it("필드 이름이 파이프라인 Zod 스키마와 같다", () => {
+    const keys = (s: { properties: object }) => Object.keys(s.properties).sort();
+    expect(keys(STORYBOARD_JSON_SCHEMA)).toEqual(Object.keys(StoryboardSchema.shape).sort());
+    expect(keys(STORYBOARD_JSON_SCHEMA.properties.panels.items)).toEqual(
+      Object.keys(PanelSchema.shape).sort(),
+    );
+    expect(keys(STORYBOARD_JSON_SCHEMA.properties.characters.items)).toEqual(
+      Object.keys(CharacterSchema.shape).sort(),
+    );
+    expect(keys(STORYBOARD_JSON_SCHEMA.properties.panels.items.properties.dialogues.items)).toEqual(
+      Object.keys(DialogueSchema.shape).sort(),
+    );
   });
 });
 

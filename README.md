@@ -53,6 +53,7 @@ Next.js 16 · React 19 · TypeScript · Tailwind CSS 4 · Zod · Vitest · Verce
 | [0005](docs/decisions/0005-copyright-policy.md)          | 저작권: 권리 확인 + 비공개 기본값 + 신고 절차 |
 | [0006](docs/decisions/0006-character-confirmation.md)    | 새 등장인물 작화 전 컨펌                      |
 | [0007](docs/decisions/0007-claude-code-harness.md)       | Claude Code 하네스 기반 워크플로우            |
+| [0008](docs/decisions/0008-openai-for-storyboard.md)     | 콘티 생성 LLM은 OpenAI (기본 gpt-6-luna)      |
 
 ## 로컬 실행
 

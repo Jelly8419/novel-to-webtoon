@@ -13,11 +13,7 @@ import path from "node:path";
 import { getAiClients, type LlmUsage } from "@/lib/ai";
 import { DEFAULT_LLM_MODEL } from "@/lib/ai/openai";
 import { targetPanelsFor, type Storyboard } from "@/pipeline/schema";
-import {
-  createStoryboard,
-  normalizeEpisodeText,
-  StoryboardFormatError,
-} from "@/pipeline/storyboard";
+import { createStoryboard, normalizeEpisodeText, StoryboardError } from "@/pipeline/storyboard";
 
 const KRW_PER_USD = 1400;
 
@@ -104,7 +100,7 @@ async function main() {
     );
     console.log(`\n저장됨: ${outPath}`);
   } catch (error) {
-    if (error instanceof StoryboardFormatError) {
+    if (error instanceof StoryboardError) {
       console.error(`\n✖ ${error.message}`);
       console.error(`  비용: ${formatCost(totalCost(error.usage))}`);
     } else {

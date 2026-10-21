@@ -29,9 +29,9 @@ for (const [pattern, reason] of rules) {
   if (pattern.test(command)) block(`차단됨: ${reason}\n명령: ${command}`);
 }
 
-if (/\bAI_MODE=live\b/.test(command)) {
+if (/\bAI_MODE=live\b|\btry:\w+\b.*--live\b/.test(command)) {
   block(
-    "AI_MODE=live 는 실제 API 비용이 나가요. 사용자가 이번 작업에서 실제 호출을 명시적으로 허락했는지 먼저 확인하세요.",
+    "실제 AI API 호출(AI_MODE=live, --live)은 비용이 나가요. 사용자가 이번 작업에서 실제 호출을 명시적으로 허락했는지 먼저 확인하세요.",
   );
 }
 

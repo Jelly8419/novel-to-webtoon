@@ -3,13 +3,29 @@ import type { CharacterSheet } from "@/pipeline/schema";
 export type StoryboardRequest = {
   text: string;
   targetPanels: number;
+  maxPanels: number;
   /** 이미 컨펌된 인물. LLM이 같은 이름을 쓰도록 알려준다. */
   knownCharacters: Pick<CharacterSheet, "name" | "appearance">[];
 };
 
-/** 텍스트 처리 (장면 분석 + 콘티). 반환값은 검증 전 원본 JSON이다. */
+/** LLM 한 번 호출의 사용량. 비용 추적과 실험 기록에 쓴다. */
+export type LlmUsage = {
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  /** 가격표에 없는 모델이면 null */
+  costUsd: number | null;
+};
+
+export type LlmResult = {
+  /** 검증 전 원본 JSON. 반드시 스키마로 검증한 뒤 쓴다. */
+  data: unknown;
+  usage: LlmUsage;
+};
+
+/** 텍스트 처리 (장면 분석 + 콘티) */
 export interface LlmClient {
-  createStoryboard(request: StoryboardRequest): Promise<unknown>;
+  createStoryboard(request: StoryboardRequest): Promise<LlmResult>;
 }
 
 export type ImageRequest = {

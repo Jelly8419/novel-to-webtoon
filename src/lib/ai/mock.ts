@@ -29,10 +29,10 @@ export const mockLlm: LlmClient = {
     const shots = ["wide", "medium", "closeup"] as const;
     const panels = Array.from({ length: panelCount }, (_, index) => {
       const chunk = sentences.slice(index * perPanel, (index + 1) * perPanel).join(" ");
-      const dialogues = [...chunk.matchAll(QUOTE)].map((m) => ({
-        speaker: protagonist,
-        text: m[1].trim(),
-      }));
+      const dialogues = [...chunk.matchAll(QUOTE)]
+        .map((m) => m[1].trim())
+        .filter((line) => line.length > 0)
+        .map((line) => ({ speaker: protagonist, text: line }));
       return {
         index,
         sceneIndex: Math.floor(index / 4),
@@ -43,7 +43,10 @@ export const mockLlm: LlmClient = {
       };
     }).filter((p) => p.description.length > 0);
 
-    return { characters, panels };
+    return {
+      data: { characters, panels },
+      usage: { model: "mock", inputTokens: 0, outputTokens: 0, costUsd: 0 },
+    };
   },
 };
 
